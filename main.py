@@ -140,7 +140,7 @@ class LabelTool():
         if not dbg:
             s = self.entry.get()
             self.parent.focus()
-            self.category = int(s)
+            # self.category = int(s)
         else:
             s = r'D:\workspace\python\labelGUI'
 ##        if not os.path.isdir(s):
@@ -154,7 +154,7 @@ class LabelTool():
             return   
 
       # set up output dir
-        self.outDir = os.path.join(r'./Labels', '%s' %(self.s))
+        self.outDir = os.path.join(r'./Labels', '%s' %(s))
         if not os.path.exists(self.outDir):
             os.mkdir(self.outDir)
         
@@ -187,7 +187,7 @@ class LabelTool():
 
         # load labels
         self.clearBBox()
-        self.imagename = os.path.split(imagepath)[-1].split('.')[0]
+        self.imagename = os.path.split(imagepath)[-1].split('.jpg')[0]
         labelname = self.imagename + '.txt'
         self.labelfilename = os.path.join(self.outDir, labelname)
         bbox_cnt = 0
@@ -197,15 +197,17 @@ class LabelTool():
                     if i == 0:
                         bbox_cnt = int(line.strip())
                         continue
-                    tmp = [int(t.strip()) for t in line.split()]
-##                    print tmp
+                    tmpfull = [str(t.strip()) for t in line.split()]
+                    tmp = [int(t) for t in tmpfull[1:]]
+                    tmp = [tmpfull[0]] + tmp
+                    print tmp
                     self.bboxList.append(tuple(tmp))
-                    tmpId = self.mainPanel.create_rectangle(tmp[0], tmp[1], \
-                                                            tmp[2], tmp[3], \
+                    tmpId = self.mainPanel.create_rectangle(tmp[1], tmp[2], \
+                                                            tmp[3], tmp[4], \
                                                             width = 2, \
                                                             outline = COLORS[(len(self.bboxList)-1) % len(COLORS)])
                     self.bboxIdList.append(tmpId)
-                    self.listbox.insert(END, '(%d, %d) -> (%d, %d)' %(tmp[0], tmp[1], tmp[2], tmp[3]))
+                    self.listbox.insert(END, '(%d, %d) -> (%d, %d)' %(tmp[1], tmp[2], tmp[3], tmp[4]))
                     self.listbox.itemconfig(len(self.bboxIdList) - 1, fg = COLORS[(len(self.bboxIdList) - 1) % len(COLORS)])
 
     def saveImage(self):
@@ -324,12 +326,20 @@ class LabelTool():
         self.classbox.itemconfig(0,fg = COLORS[0])    
 
     def prevImage(self, event = None):
+        for bbox in self.bboxList:
+            if len(bbox) != 5 or len(bbox[0]) == 0:
+                print 'this box has no class, maybe you should delete the box and select again'
+                return
         self.saveImage()
         if self.cur > 1:
             self.cur -= 1
             self.loadImage()
 
     def nextImage(self, event = None):
+        for bbox in self.bboxList:
+            if len(bbox) != 5 or len(bbox[0]) == 0:
+                print 'this box has no class, maybe you should delete the box and select again'
+                return
         self.saveImage()
         if self.cur < self.total:
             self.cur += 1
