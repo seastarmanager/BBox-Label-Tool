@@ -147,14 +147,14 @@ class LabelTool():
 ##            tkMessageBox.showerror("Error!", message = "The specified dir doesn't exist!")
 ##            return
         # get image list
-        self.imageDir = os.path.join(r'./Images', '%d' %(self.category))
+        self.imageDir = os.path.join(r'./Images', '%s' %(s))
         self.imageList = glob.glob(os.path.join(self.imageDir, '*.jpg'))
         if len(self.imageList) == 0:
             print 'No .JPEG images found in the specified dir!'
             return   
 
       # set up output dir
-        self.outDir = os.path.join(r'./Labels', '%d' %(self.category))
+        self.outDir = os.path.join(r'./Labels', '%s' %(self.s))
         if not os.path.exists(self.outDir):
             os.mkdir(self.outDir)
         
