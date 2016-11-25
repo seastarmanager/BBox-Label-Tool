@@ -19,6 +19,8 @@ COLORS = ['red', 'blue', 'yellow', 'pink', 'cyan', 'green', 'black']
 # image sizes for the examples
 SIZE = 256, 256
 
+classLabels=['mat', 'door', 'sofa', 'chair', 'table', 'bed', 'ashcan', 'shoe']
+
 class LabelTool():
     def __init__(self, master):
         # set up the main frame
@@ -26,7 +28,7 @@ class LabelTool():
         self.parent.title("LabelTool")
         self.frame = Frame(self.parent)
         self.frame.pack(fill=BOTH, expand=1)
-        self.parent.resizable(width = FALSE, height = FALSE)
+        self.parent.resizable(width = False, height = False)
 
         # initialize global state
         self.imageDir = ''
@@ -52,6 +54,7 @@ class LabelTool():
         self.bboxList = []
         self.hl = None
         self.vl = None
+        self.currentClass = ''
 
         # ----------------- GUI stuff ---------------------
         # dir entry & load
@@ -81,10 +84,24 @@ class LabelTool():
         self.btnDel.grid(row = 3, column = 2, sticky = W+E+N)
         self.btnClear = Button(self.frame, text = 'ClearAll', command = self.clearBBox)
         self.btnClear.grid(row = 4, column = 2, sticky = W+E+N)
-
+        
+        #select class type
+        self.classPanel = Frame(self.frame)
+        self.classPanel.grid(row = 5, column = 1, columnspan = 10, sticky = W+E)
+        label = Label(self.classPanel, text = 'class:')
+        label.grid(row = 5, column = 1,  sticky = W+N)
+       
+        self.classbox = Listbox(self.classPanel,  width = 4, height = 2)
+        self.classbox.grid(row = 5,column = 2)
+        for each in range(len(classLabels)):
+            function = 'select' + classLabels[each]
+            print classLabels[each]
+            btnMat = Button(self.classPanel, text = classLabels[each], command = getattr(self, function))
+            btnMat.grid(row = 5, column = each + 3)
+        
         # control panel for image navigation
         self.ctrPanel = Frame(self.frame)
-        self.ctrPanel.grid(row = 5, column = 1, columnspan = 2, sticky = W+E)
+        self.ctrPanel.grid(row = 6, column = 1, columnspan = 2, sticky = W+E)
         self.prevBtn = Button(self.ctrPanel, text='<< Prev', width = 10, command = self.prevImage)
         self.prevBtn.pack(side = LEFT, padx = 5, pady = 3)
         self.nextBtn = Button(self.ctrPanel, text='Next >>', width = 10, command = self.nextImage)
@@ -113,7 +130,7 @@ class LabelTool():
         self.disp.pack(side = RIGHT)
 
         self.frame.columnconfigure(1, weight = 1)
-        self.frame.rowconfigure(4, weight = 1)
+        self.frame.rowconfigure(10, weight = 1)
 
         # for debugging
 ##        self.setImage()
@@ -130,39 +147,31 @@ class LabelTool():
 ##            tkMessageBox.showerror("Error!", message = "The specified dir doesn't exist!")
 ##            return
         # get image list
-        self.imageDir = os.path.join(r'./Images', '%03d' %(self.category))
-        self.imageList = glob.glob(os.path.join(self.imageDir, '*.JPEG'))
+        self.imageDir = os.path.join(r'./Images', '%d' %(self.category))
+        self.imageList = glob.glob(os.path.join(self.imageDir, '*.jpg'))
         if len(self.imageList) == 0:
             print 'No .JPEG images found in the specified dir!'
-            return
+            return   
 
+      # set up output dir
+        self.outDir = os.path.join(r'./Labels', '%d' %(self.category))
+        if not os.path.exists(self.outDir):
+            os.mkdir(self.outDir)
+        
+        labeledPicList = glob.glob(os.path.join(self.outDir, '*.txt'))
+        
+        for label in labeledPicList:
+            data = open(label, 'r')
+            if '0\n' == data.read():
+                data.close()
+                continue
+            data.close()
+            picture = label.replace('Labels', 'Images').replace('.txt', '.jpg')
+            if picture in self.imageList:
+                self.imageList.remove(picture)
         # default to the 1st image in the collection
         self.cur = 1
         self.total = len(self.imageList)
-
-         # set up output dir
-        self.outDir = os.path.join(r'./Labels', '%03d' %(self.category))
-        if not os.path.exists(self.outDir):
-            os.mkdir(self.outDir)
-
-        # load example bboxes
-        self.egDir = os.path.join(r'./Examples', '%03d' %(self.category))
-        if not os.path.exists(self.egDir):
-            return
-        filelist = glob.glob(os.path.join(self.egDir, '*.JPEG'))
-        self.tmp = []
-        self.egList = []
-        random.shuffle(filelist)
-        for (i, f) in enumerate(filelist):
-            if i == 3:
-                break
-            im = Image.open(f)
-            r = min(SIZE[0] / im.size[0], SIZE[1] / im.size[1])
-            new_size = int(r * im.size[0]), int(r * im.size[1])
-            self.tmp.append(im.resize(new_size, Image.ANTIALIAS))
-            self.egList.append(ImageTk.PhotoImage(self.tmp[-1]))
-            self.egLabels[i].config(image = self.egList[-1], width = SIZE[0], height = SIZE[1])
-
         self.loadImage()
         print '%d images loaded from %s' %(self.total, s)
 
@@ -170,6 +179,7 @@ class LabelTool():
         # load image
         imagepath = self.imageList[self.cur - 1]
         self.img = Image.open(imagepath)
+        self.imgSize = self.img.size
         self.tkimg = ImageTk.PhotoImage(self.img)
         self.mainPanel.config(width = max(self.tkimg.width(), 400), height = max(self.tkimg.height(), 400))
         self.mainPanel.create_image(0, 0, image = self.tkimg, anchor=NW)
@@ -209,10 +219,15 @@ class LabelTool():
     def mouseClick(self, event):
         if self.STATE['click'] == 0:
             self.STATE['x'], self.STATE['y'] = event.x, event.y
+            #self.STATE['x'], self.STATE['y'] = self.imgSize[0], self.imgSize[1]
         else:
             x1, x2 = min(self.STATE['x'], event.x), max(self.STATE['x'], event.x)
             y1, y2 = min(self.STATE['y'], event.y), max(self.STATE['y'], event.y)
-            self.bboxList.append((x1, y1, x2, y2))
+            if x2 > self.imgSize[0]:
+                x2 = self.imgSize[0]
+            if y2 > self.imgSize[1]:
+                y2 = self.imgSize[1]                
+            self.bboxList.append((self.currentClass, x1, y1, x2, y2))
             self.bboxIdList.append(self.bboxId)
             self.bboxId = None
             self.listbox.insert(END, '(%d, %d) -> (%d, %d)' %(x1, y1, x2, y2))
@@ -259,6 +274,54 @@ class LabelTool():
         self.listbox.delete(0, len(self.bboxList))
         self.bboxIdList = []
         self.bboxList = []
+        
+    def selectmat(self):
+        self.currentClass = 'mat'
+        self.classbox.delete(0,END)
+        self.classbox.insert(0, 'mat')
+        self.classbox.itemconfig(0,fg = COLORS[0])
+    
+    def selectdoor(self):
+        self.currentClass = 'door'    
+        self.classbox.delete(0,END)    
+        self.classbox.insert(0, 'door')
+        self.classbox.itemconfig(0,fg = COLORS[0])
+    
+    def selectsofa(self):
+        self.currentClass = 'sofa'    
+        self.classbox.delete(0,END)    
+        self.classbox.insert(0, 'sofa')
+        self.classbox.itemconfig(0,fg = COLORS[0])
+        
+    def selectchair(self):
+        self.currentClass = 'chair'    
+        self.classbox.delete(0,END)    
+        self.classbox.insert(0, 'chair')
+        self.classbox.itemconfig(0,fg = COLORS[0])
+        
+    def selecttable(self):
+        self.currentClass = 'table'    
+        self.classbox.delete(0,END)    
+        self.classbox.insert(0, 'table')
+        self.classbox.itemconfig(0,fg = COLORS[0])
+        
+    def selectbed(self):
+        self.currentClass = 'bed'
+        self.classbox.delete(0,END)    
+        self.classbox.insert(0, 'bed')
+        self.classbox.itemconfig(0,fg = COLORS[0])
+        
+    def selectashcan(self):
+        self.currentClass = 'ashcan'    
+        self.classbox.delete(0,END)    
+        self.classbox.insert(0, 'ashcan')
+        self.classbox.itemconfig(0,fg = COLORS[0])
+        
+    def selectshoe(self):
+        self.currentClass = 'shoe'    
+        self.classbox.delete(0,END)    
+        self.classbox.insert(0, 'shoe')
+        self.classbox.itemconfig(0,fg = COLORS[0])    
 
     def prevImage(self, event = None):
         self.saveImage()
